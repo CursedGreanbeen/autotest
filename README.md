@@ -1,2 +1,2 @@
 # autotest
-Autotesting trial
+HTTP benchmarking tool
