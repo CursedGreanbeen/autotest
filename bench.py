@@ -72,33 +72,30 @@ def host_info(url, count):
     return total_info
 
 
+# Расчлененка ввода и проверка, что он состоит как минимум из одного непробельного символа
+def separate_check_input(user_input):
+    separated_input = [host.strip() for host in user_input if host.strip()]
+    if not separated_input:
+        print('Enter hosts using -H/--hosts option OR -F/--file option')
+        exit(1)
+    return separated_input
+
+
 # Будущий вывод
 outputs = []
 
 # Проверка наличия пользовательского ввода
 if args.hosts:
-    # Проверка того, что хосты состоят как минимум из одного непробельного символа
-    separated_hosts = [host.strip() for host in args.hosts.split(',') if host.strip()]
-    if not separated_hosts:
-        print('Enter hosts using -H/--hosts option OR -F/--file option')
-        exit(1)
+    separated_hosts = separate_check_input(args.hosts.split(','))
 
 # Проверка наличия файлового ввода
 elif args.file and os.path.exists(args.file):
     try:
         with open(args.file, 'r') as infile:
-            # Проверка того, что хосты состоят как минимум из одного непробельного символа
-            separated_hosts = [host.strip() for host in infile if host.strip()]
-            if not separated_hosts:
-                print('Enter hosts using -H/--hosts option OR -F/--file option')
-                exit(1)
+            separated_hosts = separate_check_input(infile)
     except IOError as e:
         print(f"Error reading file: {e}")
         exit(1)
-
-else:
-    print('Enter hosts using -H/--hosts option OR -F/--file option')
-    exit(1)
 
 
 # Проверка того, что count больше нуля
