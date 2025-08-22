@@ -2,12 +2,13 @@ import argparse
 import requests
 from collections import Counter
 import re
+import os
 
 
 # Создание парсера и аргументов
-parser = argparse.ArgumentParser(description='Enter hosts separated with comma without space')
+parser = argparse.ArgumentParser(description='Enter comma-separated hosts')
 parser.add_argument('-H', '--hosts', help='Enter hosts', type=str)
-parser.add_argument('-C', '--count', help='Key number', default=1, type=int)
+parser.add_argument('-C', '--count', help='Enter count number', default=1, type=int)
 parser.add_argument('-F', '--file')
 parser.add_argument('-O', '--output')
 args = parser.parse_args()
@@ -16,7 +17,7 @@ args = parser.parse_args()
 # Функция, которая обращается по заданному адресу
 def request(url):
     try:
-        response = requests.get(url)
+        response = requests.get(url, timeout=5)
         time = response.elapsed.total_seconds()
 
         # Определяем тип ответа
@@ -28,7 +29,6 @@ def request(url):
             return None, 'Error'
 
     except requests.exceptions.RequestException:
-        print(f'Request error for host {url}...')
         return None, 'Error'
 
 
@@ -65,28 +65,51 @@ def host_info(url, count):
     return total_info
 
 
-# Выполнение скрипта по заданным хостам
+# Проверка наличия пользовательского ввода
 if args.hosts:
-    # Проверка того, что строка состоит как минимум из одного непробельного символа
-    if not args.hosts.strip():
-        print('Enter hosts using -H or --hosts option')
+    user_input = args.hosts
+
+    # Проверка того, что хосты состоят как минимум из одного непробельного символа
+    separated_hosts = [host.strip() for host in user_input.split(',') if host.strip()]
+    if not separated_hosts:
+        print('Enter hosts using -H/--hosts option OR -F/--file option')
         exit(1)
 
-    # Разделение строки на отдельные хосты и проверка соответствия заданному шаблону
-    separated_hosts = args.hosts.split(',')
-    for host in separated_hosts:
-        if not re.match(r'^https?://[0-9A-Za-z-]+\.[A-Za-z]+', host):
-            print(f'{host} is invalid URL. You must use the following pattern: https://example.com')
-            continue
+# Проверка наличия файлового ввода
+elif args.file and os.path.exists(args.file):
+    try:
+        with open(args.file, 'r') as infile:
+            separated_hosts = [host.strip() for host in infile if host.strip()]
+            if not separated_hosts:
+                print('Enter hosts using -H/--hosts option OR -F/--file option')
+                exit(1)
+    except IOError as e:
+        print(f"Error reading file: {e}")
+        exit(1)
 
-        # Проверка того, что count больше нуля, и запуск функций с учетом введенных параметров
-        if args.count > 0:
-            output = host_info(host, args.count)
-        else:
-            print(f'Invalid count: {args.count}. Set to default value 1')
-            output = host_info(host, 1)
+else:
+    print('Enter hosts using -H/--hosts option OR -F/--file option')
+    exit(1)
 
-        # Вывод статистики в консоль
+
+# Проверка хостов на соответствие заданному шаблону
+for host in separated_hosts:
+    if not re.match(r'^https?://[0-9A-Za-z-]+\.[A-Za-z]{2,}', host):
+        print(f'{host} is invalid URL. You have to use the following pattern: https://example.com')
+        continue
+
+    # Проверка того, что count больше нуля. Запуск функции сбора статистики, если введенные параметры верны
+    if args.count <= 0:
+        print(f'Invalid count number: {args.count}')
+        exit(1)
+    output = host_info(host, args.count)
+
+    # Вывод статистики в консоль или в файл
+    if not args.output:
         for key, value in output.items():
-            print(f"{key}: {value}")
+            print(f"{key}: {value}\n")
+    else:
+        with open(args.output, 'a') as outfile:
+            for key, value in output.items():
+                outfile.write(f"{key}: {value}\n")
 
