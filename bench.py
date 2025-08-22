@@ -7,9 +7,12 @@ import os
 
 # Создание парсера и аргументов
 parser = argparse.ArgumentParser(description='Enter comma-separated hosts')
-parser.add_argument('-H', '--hosts', help='Enter hosts', type=str)
+
+group = parser.add_mutually_exclusive_group(required=True)
+group.add_argument('-H', '--hosts', help='Enter hosts', type=str)
+group.add_argument('-F', '--file')
+
 parser.add_argument('-C', '--count', help='Enter count number', default=1, type=int)
-parser.add_argument('-F', '--file')
 parser.add_argument('-O', '--output')
 args = parser.parse_args()
 
@@ -28,8 +31,12 @@ def request(url):
         else:
             return None, 'Error'
 
+    except requests.exceptions.Timeout:
+        return None, 'Timeout'
+    except requests.exceptions.ConnectionError:
+        return None, 'ConnectionError'
     except requests.exceptions.RequestException:
-        return None, 'Error'
+        return None, 'RequestError'
 
 
 # Функция, которая собирает и считает статистику по адресу заданное число раз
@@ -38,10 +45,10 @@ def host_info(url, count):
     types = []
 
     for _ in range(count):
-        time, type = request(url)
+        time, response_type = request(url)
         if time:
             times.append(time)
-        types.append(type)
+        types.append(response_type)
 
     stats = Counter(types)
 
@@ -65,12 +72,13 @@ def host_info(url, count):
     return total_info
 
 
+# Будущий вывод
+outputs = []
+
 # Проверка наличия пользовательского ввода
 if args.hosts:
-    user_input = args.hosts
-
     # Проверка того, что хосты состоят как минимум из одного непробельного символа
-    separated_hosts = [host.strip() for host in user_input.split(',') if host.strip()]
+    separated_hosts = [host.strip() for host in args.hosts.split(',') if host.strip()]
     if not separated_hosts:
         print('Enter hosts using -H/--hosts option OR -F/--file option')
         exit(1)
@@ -79,6 +87,7 @@ if args.hosts:
 elif args.file and os.path.exists(args.file):
     try:
         with open(args.file, 'r') as infile:
+            # Проверка того, что хосты состоят как минимум из одного непробельного символа
             separated_hosts = [host.strip() for host in infile if host.strip()]
             if not separated_hosts:
                 print('Enter hosts using -H/--hosts option OR -F/--file option')
@@ -92,24 +101,34 @@ else:
     exit(1)
 
 
+# Проверка того, что count больше нуля
+if args.count <= 0:
+    print(f'Invalid count number: {args.count}')
+    exit(1)
+
 # Проверка хостов на соответствие заданному шаблону
 for host in separated_hosts:
     if not re.match(r'^https?://[0-9A-Za-z-]+\.[A-Za-z]{2,}', host):
         print(f'{host} is invalid URL. You have to use the following pattern: https://example.com')
         continue
 
-    # Проверка того, что count больше нуля. Запуск функции сбора статистики, если введенные параметры верны
-    if args.count <= 0:
-        print(f'Invalid count number: {args.count}')
-        exit(1)
-    output = host_info(host, args.count)
+    # Запуск функции сбора статистики, если введенные параметры верны
+    result = host_info(host, args.count)
+    outputs.append(result)
 
-    # Вывод статистики в консоль или в файл
-    if not args.output:
-        for key, value in output.items():
-            print(f"{key}: {value}\n")
-    else:
-        with open(args.output, 'a') as outfile:
-            for key, value in output.items():
-                outfile.write(f"{key}: {value}\n")
+# Вывод статистики в консоль или в файл
+if not args.output:
+    for out in outputs:
+        for key, value in out.items():
+            print(f"{key}: {value}")
+        print()
+else:
+    try:
+        with open(args.output, 'w') as outfile:
+            for out in outputs:
+                for key, value in out.items():
+                    outfile.write(f"{key}: {value}\n")
+    except IOError as e:
+        print(f"Error reading file: {e}")
+        exit(1)
 
