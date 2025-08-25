@@ -3,6 +3,8 @@ import requests
 from collections import Counter
 import re
 import os
+from concurrent.futures import ThreadPoolExecutor
+import time
 
 
 # Обращение по заданному адресу
@@ -57,6 +59,7 @@ def analyze_input(user_input):
 def if_valid_url(url):
     if not re.match(r'^https?://[0-9A-Za-z-]+\.[A-Za-z]{2,}', url):
         print(f'{url} is invalid URL. You have to use the following pattern: https://example.com')
+        return None
     else:
         return url
 
@@ -81,6 +84,8 @@ def write_output(res, out_file=None):
 
 
 def main():
+    start_time = time.time()
+
     # Создание парсера и аргументов
     parser = argparse.ArgumentParser(description='Enter comma-separated hosts')
 
@@ -124,9 +129,21 @@ def main():
 
     # Сбор статистики и вывод итогов
     else:
-        outputs = [host_info(host, args.count) for host in valid_urls]
-        write_output(outputs)
+        with ThreadPoolExecutor(max_workers=20) as executor:
+            future_results = {executor.submit(host_info, host, args.count): host for host in valid_urls}
 
+            outputs = []
+            for future in future_results:
+                try:
+                    result = future.result()
+                    outputs.append(result)
+                except Exception as e:
+                    print(f"Error processing URL {future_results[future]}: {e}")
+            write_output(outputs, args.output)
+
+    end_time = time.time()
+    run_time = end_time - start_time
+    print(f'Время выполнения программы: {run_time:.2f} секунд(ы)')
 
 if __name__ == "__main__":
     main()
