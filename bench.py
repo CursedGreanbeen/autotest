@@ -5,44 +5,23 @@ import re
 import os
 
 
-# Создание парсера и аргументов
-parser = argparse.ArgumentParser(description='Enter comma-separated hosts')
-
-group = parser.add_mutually_exclusive_group(required=True)
-group.add_argument('-H', '--hosts', help='Enter hosts', type=str)
-group.add_argument('-F', '--file')
-
-parser.add_argument('-C', '--count', help='Enter count number', default=1, type=int)
-parser.add_argument('-O', '--output')
-args = parser.parse_args()
-
-
-# Функция, которая обращается по заданному адресу
+# Обращение по заданному адресу
 def request(url):
     try:
         response = requests.get(url, timeout=5)
         time = response.elapsed.total_seconds()
 
         # Определяем тип ответа
-        if response.status_code < 400:
-            return time, 'Success'
-        elif 400 <= response.status_code <= 599:
-            return time, 'Failed'
-        else:
-            return None, 'Error'
+        status = 'Success' if response.status_code < 400 else 'Failed'
+        return time, status
 
-    except requests.exceptions.Timeout:
-        return None, 'Timeout'
-    except requests.exceptions.ConnectionError:
-        return None, 'ConnectionError'
     except requests.exceptions.RequestException:
-        return None, 'RequestError'
+        return None, 'Error'
 
 
-# Функция, которая собирает и считает статистику по адресу заданное число раз
+# Сбор и подсчет статистики по адресу заданное число раз
 def host_info(url, count):
-    times = []
-    types = []
+    times, types = [], []
 
     for _ in range(count):
         time, response_type = request(url)
@@ -52,28 +31,21 @@ def host_info(url, count):
 
     stats = Counter(types)
 
-    if times:
-        time_avg = sum(times) / len(times)
-        time_max = max(times)
-        time_min = min(times)
-    else:
-        time_avg = time_max = time_min = None
-
     total_info = {
         'Host': url,
-        'Success': stats['Success'],
-        'Failed': stats['Failed'],
-        'Error': stats['Error'],
-        'Min': time_min,
-        'Max': time_max,
-        'Avg': time_avg
+        'Success': stats.get('Success', 0),
+        'Failed': stats.get('Failed', 0),
+        'Error': stats.get('Error', 0),
+        'Min': min(times) if times else 'N/A',
+        'Max': max(times) if times else 'N/A',
+        'Avg': sum(times) / len(times) if times else 'N/A'
     }
 
     return total_info
 
 
-# Расчлененка ввода и проверка, что он состоит как минимум из одного непробельного символа
-def separate_check_input(user_input):
+# Расчленение ввода и проверка того, что он состоит как минимум из одного непробельного символа
+def analyze_input(user_input):
     separated_input = [host.strip() for host in user_input if host.strip()]
     if not separated_input:
         print('Enter hosts using -H/--hosts option OR -F/--file option')
@@ -81,51 +53,81 @@ def separate_check_input(user_input):
     return separated_input
 
 
-# Будущий вывод
-outputs = []
+# Проверка хостов на соответствие шаблону из задания
+def if_valid_url(url):
+    if not re.match(r'^https?://[0-9A-Za-z-]+\.[A-Za-z]{2,}', url):
+        print(f'{url} is invalid URL. You have to use the following pattern: https://example.com')
+    else:
+        return url
 
-# Проверка наличия пользовательского ввода
-if args.hosts:
-    separated_hosts = separate_check_input(args.hosts.split(','))
-
-# Проверка наличия файлового ввода
-elif args.file and os.path.exists(args.file):
-    try:
-        with open(args.file, 'r') as infile:
-            separated_hosts = separate_check_input(infile)
-    except IOError as e:
-        print(f"Error reading file: {e}")
-        exit(1)
-
-
-# Проверка того, что count больше нуля
-if args.count <= 0:
-    print(f'Invalid count number: {args.count}')
-    exit(1)
-
-# Проверка хостов на соответствие заданному шаблону
-for host in separated_hosts:
-    if not re.match(r'^https?://[0-9A-Za-z-]+\.[A-Za-z]{2,}', host):
-        print(f'{host} is invalid URL. You have to use the following pattern: https://example.com')
-        continue
-
-    # Запуск функции сбора статистики, если введенные параметры верны
-    result = host_info(host, args.count)
-    outputs.append(result)
 
 # Вывод статистики в консоль или в файл
-if not args.output:
-    for out in outputs:
-        for key, value in out.items():
-            print(f"{key}: {value}")
-        print()
-else:
-    try:
-        with open(args.output, 'w') as outfile:
-            for out in outputs:
-                for key, value in out.items():
-                    outfile.write(f"{key}: {value}\n")
-    except IOError as e:
-        print(f"Error reading file: {e}")
+def write_output(res, out_file=None):
+    if out_file:
+        try:
+            with open(out_file, 'w') as outfile:
+                for r in res:
+                    for key, value in r.items():
+                        outfile.write(f'{key}: {value}\n')
+                    outfile.write('\n')
+        except IOError as e:
+            print(f"Error writing file: {e}")
+            exit(1)
+    else:
+        for r in res:
+            for key, value in r.items():
+                print(f'{key}: {value}')
+            print()
+
+
+def main():
+    # Создание парсера и аргументов
+    parser = argparse.ArgumentParser(description='Enter comma-separated hosts')
+
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument('-H', '--hosts', help='Enter hosts', type=str)
+    group.add_argument('-F', '--file')
+
+    parser.add_argument('-C', '--count', help='Enter count number', default=1, type=int)
+    parser.add_argument('-O', '--output')
+    args = parser.parse_args()
+
+    # Проверка наличия ввода прямо в консоль
+    if args.hosts:
+        separated_hosts = analyze_input(args.hosts.split(','))
+
+    # Проверка наличия файлового ввода
+    elif args.file and os.path.exists(args.file):
+        try:
+            with open(args.file, 'r') as infile:
+                separated_hosts = analyze_input(infile)
+        except FileNotFoundError:
+            print("File Not Found Error: No such file or directory")
+            exit(1)
+        except PermissionError:
+            print("Permission Denied Error: Access is denied")
+            exit(1)
+        except IOError as e:
+            print(f"Error reading file: {e}")
+            exit(1)
+
+    # Проверка того, что count больше нуля
+    if args.count <= 0:
+        print(f'Invalid count number: {args.count}')
         exit(1)
+
+    # Проверка хостов на соответствие заданному шаблону
+    valid_urls = [if_valid_url(host) for host in separated_hosts]
+    if not any(valid_urls):
+        print('No valid URLs provided!')
+        exit(1)
+
+    # Сбор статистики и вывод итогов
+    else:
+        outputs = [host_info(host, args.count) for host in valid_urls]
+        write_output(outputs)
+
+
+if __name__ == "__main__":
+    main()
 
