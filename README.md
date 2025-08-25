@@ -21,7 +21,7 @@
 4. Запуск из командной строки
     
 ## Пример команды для запуска
-python bench.py -H https://ya.ru,https://google.com -C 5
+```python bench.py -H https://ya.ru,https://google.com -C 5``` 
 
 ## Пример вывода
 ```
