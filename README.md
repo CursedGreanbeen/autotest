@@ -16,8 +16,7 @@
     ```git clone https://github.com/CursedGreanbeen/autotest.git``` 
 2. Переход в директорию autotest
    ```cd autotest```
-3. Установка зависимостей
-   ```pip install requests```
+3. Установка зависимостей (файл requirements.txt)   
 4. Запуск из командной строки
     
 ## Пример команды для запуска
